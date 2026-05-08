@@ -111,6 +111,45 @@ fn test_parses_sample_with_irregular_boolean_values() {
 }
 
 #[test]
+// https://github.com/omerbenamram/evtx/issues/289
+// Bool-typed fields whose stored i32 is neither 0 nor 1 must be emitted as the
+// raw integer instead of being silently coerced to "true". The fixture is
+// known to contain 24 such fields with value 65536, 49 with value 16, and 48
+// with value 8 — exercise the most distinctive (65536), since 8 and 16 also
+// appear legitimately in unrelated integer fields.
+fn test_irregular_bool_values_are_preserved_in_xml() {
+    ensure_env_logger_initialized();
+    let mut parser = EvtxParser::from_path(sample_with_irregular_values()).unwrap();
+    let mut xml = String::new();
+    for r in parser.records() {
+        xml.push_str(&r.unwrap().data);
+        xml.push('\n');
+    }
+    let occurrences = xml.matches(">65536<").count();
+    assert_eq!(
+        occurrences, 24,
+        "expected 24 bool fields rendered as raw 65536, got {occurrences}",
+    );
+}
+
+#[test]
+// https://github.com/omerbenamram/evtx/issues/289
+fn test_irregular_bool_values_are_preserved_in_json() {
+    ensure_env_logger_initialized();
+    let mut parser = EvtxParser::from_path(sample_with_irregular_values()).unwrap();
+    let mut json = String::new();
+    for r in parser.records_json() {
+        json.push_str(&r.unwrap().data);
+        json.push('\n');
+    }
+    let occurrences = json.matches(":65536").count();
+    assert_eq!(
+        occurrences, 24,
+        "expected 24 bool fields rendered as raw 65536 in JSON, got {occurrences}",
+    );
+}
+
+#[test]
 fn test_dirty_sample_with_a_bad_checksum() {
     test_full_sample(sample_with_a_bad_checksum(), 1910, 4)
 }

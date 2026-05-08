@@ -172,7 +172,7 @@ mod imp {
             .iter()
             .map(|v| match v {
                 JsonValue::Null => BinXmlValue::NullType,
-                JsonValue::Bool(b) => BinXmlValue::BoolType(*b),
+                JsonValue::Bool(b) => BinXmlValue::BoolType(if *b { 1 } else { 0 }),
                 JsonValue::Number(n) => {
                     if let Some(i) = n.as_i64() {
                         BinXmlValue::Int64Type(i)

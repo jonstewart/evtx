@@ -7,7 +7,7 @@ use crate::utils::{ByteCursor, Utf16LeSlice};
 use bumpalo::Bump;
 use encoding::EncodingRef;
 use jiff::Timestamp;
-use log::{trace, warn};
+use log::trace;
 use std::fmt::{self, Display};
 use std::io::Cursor;
 use std::string::ToString;
@@ -77,7 +77,13 @@ pub enum BinXmlValue<'a> {
     UInt64Type(u64),
     Real32Type(f32),
     Real64Type(f64),
-    BoolType(bool),
+    /// EVTX Bool fields are stored as 32-bit integers. The reference
+    /// implementations only define 0 (false) and 1 (true), but Windows itself
+    /// emits other values for some events (notably NTFS file attribute
+    /// bitmasks). We preserve the raw integer here so downstream consumers can
+    /// recover the bitmask; the renderers map 0/1 to false/true and emit any
+    /// other value verbatim. See https://github.com/omerbenamram/evtx/issues/289.
+    BoolType(i32),
     BinaryType(&'a [u8]),
     GuidType(Guid),
     SizeTType(usize),
@@ -105,7 +111,7 @@ pub enum BinXmlValue<'a> {
     UInt64ArrayType(&'a [u64]),
     Real32ArrayType(&'a [f32]),
     Real64ArrayType(&'a [f64]),
-    BoolArrayType(&'a [bool]),
+    BoolArrayType(&'a [i32]),
     BinaryArrayType,
     GuidArrayType(&'a [Guid]),
     SizeTArrayType,
@@ -377,20 +383,7 @@ impl<'a> BinXmlValue<'a> {
 
             (BinXmlValueType::BoolType, _) => {
                 let raw = i32::from_le_bytes(cursor.array::<4>("bool")?);
-                let v = match raw {
-                    0 => false,
-                    1 => true,
-                    other => {
-                        warn!(
-                            "invalid boolean value {} at offset {}; treating as {}",
-                            other,
-                            cursor.position(),
-                            other != 0
-                        );
-                        other != 0
-                    }
-                };
-                BinXmlValue::BoolType(v)
+                BinXmlValue::BoolType(raw)
             }
 
             (BinXmlValueType::GuidType, _) => {
@@ -558,22 +551,7 @@ impl<'a> BinXmlValue<'a> {
                     sz,
                     "bool_array",
                     arena,
-                    |off, b| {
-                        let raw = i32::from_le_bytes(*b);
-                        Ok(match raw {
-                            0 => false,
-                            1 => true,
-                            other => {
-                                warn!(
-                                    "invalid boolean value {} at offset {}; treating as {}",
-                                    other,
-                                    off,
-                                    other != 0
-                                );
-                                other != 0
-                            }
-                        })
-                    },
+                    |_off, b| Ok(i32::from_le_bytes(*b)),
                 )?;
                 BinXmlValue::BoolArrayType(out)
             }

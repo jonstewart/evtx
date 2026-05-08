@@ -101,9 +101,7 @@ impl ValueRenderer {
                 .map_err(EvtxError::from),
             BinXmlValue::Real32Type(v) => self.write_float(writer, *v),
             BinXmlValue::Real64Type(v) => self.write_float(writer, *v),
-            BinXmlValue::BoolType(v) => {
-                self.write_bytes(writer, if *v { b"true" } else { b"false" })
-            }
+            BinXmlValue::BoolType(v) => self.write_bool(writer, *v),
             BinXmlValue::BinaryType(bytes) => self.write_hex_bytes_upper(writer, bytes),
             BinXmlValue::GuidType(guid) => write!(writer, "{}", guid).map_err(EvtxError::from),
             BinXmlValue::SizeTType(v) => self
@@ -137,7 +135,7 @@ impl ValueRenderer {
             BinXmlValue::UInt64ArrayType(items) => self.write_delimited(writer, items),
             BinXmlValue::Real32ArrayType(items) => self.write_float_list(writer, items),
             BinXmlValue::Real64ArrayType(items) => self.write_float_list(writer, items),
-            BinXmlValue::BoolArrayType(items) => self.write_delimited(writer, items),
+            BinXmlValue::BoolArrayType(items) => self.write_bool_list(writer, items),
             BinXmlValue::GuidArrayType(items) => self.write_delimited(writer, items),
             BinXmlValue::FileTimeArrayType(items) | BinXmlValue::SysTimeArrayType(items) => {
                 self.write_datetime_list(writer, items)
@@ -425,6 +423,33 @@ impl ValueRenderer {
             }
             first = false;
             write!(writer, "{}", item).map_err(EvtxError::from)?;
+        }
+        Ok(())
+    }
+
+    /// Render a single EVTX Bool value.
+    ///
+    /// 0 → `false`, 1 → `true`, anything else → the raw `i32` (decimal).
+    /// See https://github.com/omerbenamram/evtx/issues/289.
+    fn write_bool<W: WriteExt>(&mut self, writer: &mut W, value: i32) -> Result<()> {
+        match value {
+            0 => self.write_bytes(writer, b"false"),
+            1 => self.write_bytes(writer, b"true"),
+            other => self
+                .formatter
+                .write_i32(writer, other)
+                .map_err(EvtxError::from),
+        }
+    }
+
+    fn write_bool_list<W: WriteExt>(&mut self, writer: &mut W, items: &[i32]) -> Result<()> {
+        let mut first = true;
+        for item in items {
+            if !first {
+                self.write_byte(writer, b',')?;
+            }
+            first = false;
+            self.write_bool(writer, *item)?;
         }
         Ok(())
     }

@@ -421,8 +421,20 @@ impl<'w, 'a, W: WriteExt> JsonEmitter<'w, 'a, W> {
             BinXmlValue::UInt32Type(v) => self.write_unsigned_number(u64::from(*v)),
             BinXmlValue::UInt64Type(v) => self.write_unsigned_number(*v),
             BinXmlValue::BoolType(v) => {
-                self.write_bytes(if *v { b"true" } else { b"false" })?;
-                Ok(true)
+                // 0/1 render as JSON booleans; other values are preserved as
+                // the raw signed integer so bitmask data is not lost.
+                // See https://github.com/omerbenamram/evtx/issues/289.
+                match *v {
+                    0 => {
+                        self.write_bytes(b"false")?;
+                        Ok(true)
+                    }
+                    1 => {
+                        self.write_bytes(b"true")?;
+                        Ok(true)
+                    }
+                    other => self.write_signed_number(i64::from(other)),
+                }
             }
             _ => Ok(false),
         }
